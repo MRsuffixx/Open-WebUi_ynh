@@ -1,85 +1,93 @@
-# Emballage d'une application, à partir de cet exemple
+# Open WebUI pour YunoHost
 
-* Copier cette application avant de travailler dessus, en utilisant le bouton ['Use this template'](https://github.com/new?template_name=example_ynh&template_owner=YunoHost) sur le repo GitHub.
-* Editer le fichier `manifest.toml` avec les informations spécifiques à l'application.
-* Editer les scripts `install`, `upgrade`, `remove`, `backup` et `restore`, et tous les fichiers de conf pertinents dans `conf/`.
-  * Utiliser la [documentation sur les aides aux scripts] (https://yunohost.org/packaging_apps_helpers).
-* Éditez aussi les scripts `change_url` et `config`, ou supprimez-les si vous n'en avez pas l'utilité.
-* Ajouter un fichier `LICENSE` pour le paquet. NB : ce fichier LICENSE n'est pas nécessairement la LICENSE de l'application en amont - c'est seulement la LICENSE avec laquelle vous voulez que le code de ce paquet soit publié ;). Nous recommandons d'utiliser [l'AGPL-3] (https://www.gnu.org/licenses/agpl-3.0.txt).
-* Editer les fichiers dans le répertoire `doc/`.
-* Les fichiers `README.md` doivent être générés automatiquement par <https://github.com/YunoHost/apps/tree/main/tools/readme_generator>
+[![Niveau d'intégration](https://dash.yunohost.org/integration/open-webui.svg)](https://dash.yunohost.org/appci/app/open-webui) ![Statut de fonctionnement](https://ci-apps.yunohost.org/ci/badges/open-webui.status.svg) ![Statut de maintenance](https://ci-apps.yunohost.org/ci/badges/open-webui.maintain.svg)<br>
+[![Installer Open WebUI avec YunoHost](https://install-app.yunohost.org/install-with-yunohost.svg)](https://install-app.yunohost.org/?app=open-webui)
 
----
-<!--
-N.B. : Ce README a été généré automatiquement par https://github.com/YunoHost/apps/tree/main/tools/readme_generator
-Il ne doit PAS être édité à la main.
--->
+> *Ce package vous permet d'installer Open WebUI rapidement et simplement sur un serveur YunoHost.
+> Si vous n'avez pas YunoHost, veuillez consulter [le guide](https://doc.yunohost.org/admin/get_started/install_on/) pour apprendre comment l'installer.*
 
-# Exemple d'app pour YunoHost
+## Aperçu
 
-[![Niveau d'intégration](https://dash.yunohost.org/integration/example.svg)](https://dash.yunohost.org/appci/app/example) ![Statut du fonctionnement](https://ci-apps.yunohost.org/ci/badges/example.status.svg) ![Statut de maintenance](https://ci-apps.yunohost.org/ci/badges/example.maintain.svg)
-[![Installer Example app avec YunoHost](https://install-app.yunohost.org/install-with-yunohost.svg)](https://install-app.yunohost.org/?app=example)
+Open WebUI est une interface IA auto-hébergée et extensible avec support de l'API OpenAI et une interface similaire à ChatGPT pour une autonomie complète. Il fournit une interface web moderne pour interagir avec les modèles d'IA, supportant les backends de modèles locaux (Ollama) et distants (compatibles OpenAI).
 
-*[Read this readme in english.](./README.md)*
+### Fonctionnalités
 
-> *Ce package vous permet d'installer Example app rapidement et simplement sur un serveur YunoHost.
-Si vous n'avez pas YunoHost, regardez [ici](https://yunohost.org/#/install) pour savoir comment l'installer et en profiter.*
+- **Interface style ChatGPT**: Interface web moderne et intuitive pour les conversations IA
+- **Authentification SSO/LDAP**: Intégrée au système d'authentification YunoHost
+- **Support WebSocket**: Réponses en streaming en temps réel pour des interactions fluides
+- **Support Multi-Modèles**: Connectez-vous à Ollama, OpenAI et d'autres API compatibles OpenAI
+- **Gestion des Modèles**: Téléchargez et gérez les modèles IA directement depuis l'interface
+- **Téléchargement de Fichiers**: Support des documents (PDF, TXT, DOCX, etc.)
+- **Panneau d'Administration**: Contrôles admin complets pour la gestion des utilisateurs et des paramètres
+- **Auto-hébergé**: Contrôle total sur votre infrastructure IA
 
-## Vue d'ensemble
+**Version incluse:** 0.3.31~ynh1
 
-Some long and extensive description of what the app is and does, lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
-
-### Features
-
-- Ut enim ad minim veniam, quis nostrud exercitation ullamco ;
-- Laboris nisi ut aliquip ex ea commodo consequat ;
-- Duis aute irure dolor in reprehenderit in voluptate ;
-- Velit esse cillum dolore eu fugiat nulla pariatur ;
-- Excepteur sint occaecat cupidatat non proident, sunt in culpa."
-
-
-**Version incluse :** 1.0~ynh1
-
-**Démo :** https://demo.example.com
+**Démo:** https://sentencebook.com
 
 ## Captures d'écran
 
-![Capture d'écran de Example app](./doc/screenshots/example.jpg)
+![Capture d'écran d'Open WebUI](./doc/screenshots/open-webui.png)
 
-## Avertissements / informations importantes
+## Avertissements / Informations Importantes
 
-* Any known limitations, constrains or stuff not working, such as (but not limited to):
-    * requiring a full dedicated domain ?
-    * architectures not supported ?
-    * not-working single-sign on or LDAP integration ?
-    * the app requires an important amount of RAM / disk / .. to install or to work properly
-    * etc...
+### Authentification
 
-* Other infos that people should be aware of, such as:
-    * any specific step to perform after installing (such as manually finishing the install, specific admin credentials, ...)
-    * how to configure / administrate the application if it ain't obvious
-    * upgrade process / specificities / things to be aware of ?
-    * security considerations ?
+- Open WebUI utilise SSOwat/LDAP de YunoHost pour l'authentification
+- Les utilisateurs sont automatiquement connectés lors de l'accès via le portail YunoHost
+- L'accès admin est accordé à l'utilisateur sélectionné pendant l'installation
 
-## Documentations et ressources
+### Configuration Requise
 
-* Site officiel de l'app : <https://example.com>
-* Documentation officielle utilisateur : <https://yunohost.org/apps>
-* Documentation officielle de l'admin : <https://yunohost.org/packaging_apps>
-* Dépôt de code officiel de l'app : <https://some.forge.com/example/example>
-* Documentation YunoHost pour cette app : <https://yunohost.org/app_example>
-* Signaler un bug : <https://github.com/YunoHost-Apps/example_ynh/issues>
+- **Espace Disque**: Minimum 2Go pour l'installation, plus pour les modèles IA
+- **RAM**: Minimum 1Go d'exécution, plus recommandé pour l'inférence de modèle
+- **Architecture**: Fonctionne sur toutes les architectures supportées par YunoHost (amd64, i386, armhf, arm64)
 
-## Informations pour les développeurs
+### Support WebSocket
 
-Merci de faire vos pull request sur la [branche testing](https://github.com/YunoHost-Apps/example_ynh/tree/testing).
+- Les téléchargements de modèles et les flux de chat nécessitent le support WebSocket
+- Ceci est automatiquement configuré par le package
+- Les délais d'attente sont fixés à 24 heures pour les opérations IA longue durée
 
-Pour essayer la branche testing, procédez comme suit.
+### Stockage des Modèles
 
-``` bash
-sudo yunohost app install https://github.com/YunoHost-Apps/example_ynh/tree/testing --debug
-ou
-sudo yunohost app upgrade example -u https://github.com/YunoHost-Apps/example_ynh/tree/testing --debug
+- Les modèles sont stockés dans `/home/yunohost.app/open-webui/models`
+- Les téléchargements peuvent utiliser un espace disque significatif
+- Les fichiers téléversés sont stockés dans `/home/yunohost.app/open-webui/uploads` (limite de 10Go)
+
+### Processus de Mise à Jour
+
+- Les mises à jour exécutent les migrations avec un seul worker pour éviter la corruption de la base de données SQLite
+- Le service est brièvement arrêté pendant les mises à jour (généralement moins de 2 minutes)
+- Aucune perte de données car le répertoire de données est préservé
+
+## Documentation et Ressources
+
+* Site web officiel de l'application: <https://openwebui.com>
+* Documentation utilisateur officielle: <https://docs.openwebui.com/>
+* Documentation administrateur officielle: <https://docs.openwebui.com/>
+* Dépôt de code upstream: <https://github.com/open-webui/open-webui>
+* Documentation YunoHost pour cette application: <https://yunohost.org/app_open-webui>
+* Signaler un bug: <https://github.com/YunoHost-Apps/open-webui_ynh/issues>
+
+## Info Développeur
+
+Veuillez envoyer vos pull requests vers la [branche testing](https://github.com/YunoHost-Apps/open-webui_ynh/tree/testing).
+
+Pour essayer la branche testing, procédez comme ceci:
+
+```bash
+sudo yunohost app install https://github.com/YunoHost-Apps/open-webui_ynh/tree/testing --debug
 ```
 
-**Plus d'infos sur le packaging d'applications :** <https://yunohost.org/packaging_apps>
+ou
+
+```bash
+sudo yunohost app upgrade open-webui -u https://github.com/YunoHost-Apps/open-webui_ynh/tree/testing --debug
+```
+
+**Plus d'informations concernant le packaging d'application:** <https://doc.yunohost.org/dev/packaging/>
+
+## Licence
+
+Ce package est publié sous la licence MIT. Voir le fichier [LICENSE](./LICENSE) pour plus de détails.

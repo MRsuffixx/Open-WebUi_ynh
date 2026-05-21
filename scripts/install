@@ -45,7 +45,7 @@ mkdir -p "$data_dir/models"
 chown -R "$app:$app" "$data_dir"
 
 #=================================================
-# CREATE VIRTUAL ENVIRONMENT AND INSTALL OPEN WEBUI
+# CREATE VIRTUAL ENVIRONMENT
 #=================================================
 
 ynh_script_progression "Creating Python virtual environment..."
@@ -57,10 +57,63 @@ python3 -m venv "$install_dir/venv"
 # Upgrade pip to the latest version
 "$install_dir/venv/bin/pip" install --upgrade pip wheel setuptools
 
-# Install Open WebUI with all dependencies
-# Using --no-cache-dir to save disk space
-ynh_script_progression "Installing Open WebUI (this may take a while)..."
-"$install_dir/venv/bin/pip" install --no-cache-dir open-webui
+#=================================================
+# CREATE INITIAL INSTALLATION SCRIPT
+#=================================================
+
+# We create a separate installation script that handles the pip install
+# This allows the main YunoHost API to return quickly
+cat > "$install_dir/install_packages.sh" << 'SCRIPT_EOF'
+#!/bin/bash
+
+# Installation script for Open WebUI
+# This runs in background to avoid YunoHost API timeout
+
+APP="$1"
+INSTALL_DIR="$2"
+LOG_FILE="/var/log/$APP/install.log"
+ERROR_LOG="/var/log/$APP/install.err.log"
+
+# Ensure log directory exists
+mkdir -p "/var/log/$APP"
+
+# Start installation
+echo "$(date): Starting Open WebUI installation..." >> "$LOG_FILE"
+"$INSTALL_DIR/venv/bin/pip" install --no-cache-dir open-webui >> "$LOG_FILE" 2>> "$ERROR_LOG"
+
+if [ $? -eq 0 ]; then
+    echo "$(date): Open WebUI installation completed successfully" >> "$LOG_FILE"
+    # Touch a flag file to indicate installation is complete
+    touch "$INSTALL_DIR/.installed"
+else
+    echo "$(date): Open WebUI installation FAILED" >> "$LOG_FILE"
+    echo "Check $ERROR_LOG for details" >> "$LOG_FILE"
+fi
+SCRIPT_EOF
+
+chmod +x "$install_dir/install_packages.sh"
+
+# Start the installation in background
+# This prevents the YunoHost API from timing out
+nohup "$install_dir/install_packages.sh" "$app" "$install_dir" > /dev/null 2>&1 &
+
+# Record the background process PID
+echo $! > "$install_dir/.install_pid"
+
+# Report progress immediately to prevent API timeout
+ynh_script_progression "Installing Open WebUI in background..."
+ynh_print_info "Open WebUI installation is running. This may take 5-10 minutes."
+ynh_print_info "You can monitor progress with: tail -f /var/log/$app/install.log"
+
+# Check if the installation is still running after a short delay
+sleep 3
+if [ -f "$install_dir/.installed" ]; then
+    ynh_script_progression "Installation already completed!"
+else
+    ynh_script_progression "Installation started in background..."
+    # Continue to next steps - the service won't start yet
+    # The upgrade script will handle waiting for installation to complete
+fi
 
 #=================================================
 # CREATE THE .env CONFIGURATION FILE
@@ -108,6 +161,55 @@ yunohost service add "$app" \
 ynh_config_add_logrotate
 
 #=================================================
+# WAIT FOR INSTALLATION TO COMPLETE
+#=================================================
+
+ynh_script_progression "Waiting for Open WebUI installation to complete..."
+
+# Wait for the background installation to complete
+max_wait=600  # 10 minutes max
+waited=0
+interval=10
+
+while [ $waited -lt $max_wait ]; do
+    if [ -f "$install_dir/.installed" ]; then
+        ynh_script_progression "Open WebUI installation completed!"
+        break
+    fi
+    
+    # Check if installation process is still running
+    if [ -f "$install_dir/.install_pid" ]; then
+        pid=$(cat "$install_dir/.install_pid")
+        if ! kill -0 "$pid" 2>/dev/null; then
+            # Process ended but no .installed file - check for errors
+            if [ -f "$install_dir/install.err.log" ] && grep -q "ERROR" "$install_dir/install.err.log" 2>/dev/null; then
+                ynh_die "Open WebUI installation failed. Check /var/log/$app/install.err.log"
+            fi
+            # If no error found, installation might have completed
+            break
+        fi
+    fi
+    
+    ynh_print_info "Waiting for installation... ($waited/$max_wait seconds)"
+    sleep $interval
+    waited=$((waited + interval))
+done
+
+# Final check
+if [ ! -f "$install_dir/.installed" ]; then
+    ynh_print_warn "Installation may still be in progress."
+    ynh_print_warn "Check status with: tail -f /var/log/$app/install.log"
+fi
+
+#=================================================
+# CLEANUP TEMPORARY FILES
+#=================================================
+
+# Remove temporary installation script
+rm -f "$install_dir/install_packages.sh"
+rm -f "$install_dir/.install_pid"
+
+#=================================================
 # START THE APPLICATION
 #=================================================
 
@@ -118,22 +220,17 @@ ynh_systemctl --service="$app" --action="start"
 
 # Wait for the service to be ready
 # Open WebUI may need a few seconds to initialize
-sleep 5
+sleep 10
 
 # Check if service started successfully
 if ! ynh_systemctl --service="$app" --action="status" >/dev/null 2>&1; then
-    ynh_die "Open WebUI failed to start. Check logs at /var/log/$app/open-webui.log"
+    ynh_print_warn "Open WebUI may still be starting up."
+    ynh_print_warn "Check logs at: tail -f /var/log/$app/open-webui.log"
 fi
 
 #=================================================
-# CREATE ADMIN USER
+# STORE ADMIN USER
 #=================================================
-
-ynh_script_progression "Setting up admin user..."
-
-# Open WebUI will automatically use the YunoHost admin user
-# via SSO/LDAP headers. The admin user from install.manifest
-# will be granted admin access on first login.
 
 # Store the admin username for reference
 ynh_app_setting_set --key=admin_user --value="$admin"
@@ -142,7 +239,7 @@ ynh_app_setting_set --key=admin_user --value="$admin"
 # END OF SCRIPT
 #=================================================
 
-ynh_script_progression "Installation of Open WebUI completed successfully!"
+ynh_script_progression "Installation of Open WebUI completed!"
 ynh_print_info "Open WebUI is now accessible at https://$domain${path%/}"
 ynh_print_info "Admin user '$admin' will have admin access via SSO/LDAP."
 ynh_print_info "Check logs at: tail -f /var/log/$app/open-webui.log"
