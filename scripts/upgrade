@@ -1,0 +1,212 @@
+#!/bin/bash
+
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+#=================================================
+# LOAD SETTINGS
+#=================================================
+
+app=$YNH_APP_INSTANCE_NAME
+
+# Retrieve settings
+domain=$(ynh_app_setting_get --key=domain)
+path_url=$(ynh_app_setting_get --key=path)
+port=$(ynh_app_setting_get --key=port)
+admin_user=$(ynh_app_setting_get --key=admin_user)
+
+#=================================================
+# CHECK IF THIS IS THE FIRST UPGRADE
+#=================================================
+
+# Check if .env exists (meaning the app was previously installed)
+upgrade_from_no_env_file=0
+if [ ! -e "$install_dir/.env" ]; then
+    upgrade_from_no_env_file=1
+    ynh_script_progression "First-time upgrade detected..."
+fi
+
+#=================================================
+# STOP THE SYSTEMD SERVICE
+#=================================================
+
+ynh_script_progression "Stopping Open WebUI service..."
+ynh_systemctl --service="$app" --action="stop"
+
+#=================================================
+# ENSURE DOWNWARD COMPATIBILITY
+#=================================================
+
+ynh_script_progression "Ensuring downward compatibility..."
+
+# Ensure admin_user setting exists
+if [ -z "$admin_user" ]; then
+    ynh_app_setting_set --key=admin_user --value="$admin"
+fi
+
+#=================================================
+# CREATE TEMPORARY MIGRATION SERVICE
+#=================================================
+
+# CRITICAL: SQLite database migrations must run with only 1 worker
+# If multiple workers try to migrate simultaneously, the database can corrupt
+
+ynh_script_progression "Preparing 1-worker migration environment..."
+
+# Create a temporary override directory
+mkdir -p "/etc/systemd/system/${app}.service.d"
+
+# Create the override.conf for single-worker migration
+cat > "/etc/systemd/system/${app}.service.d/override.conf" <<EOF
+# Override for migration - run with 1 worker only
+# This prevents SQLite database corruption during migrations
+
+[Service]
+# Force single worker for migrations
+ExecStart=
+ExecStart=/opt/$app/venv/bin/python -m uvicorn open_webui.app:app \
+    --host 127.0.0.1 \
+    --port $port \
+    --workers 1 \
+    --log-level info
+
+# Longer timeout for migrations
+TimeoutStartSec=300
+EOF
+
+# Reload systemd to pick up the override
+systemctl daemon-reload
+
+#=================================================
+# RUN DATABASE MIGRATIONS WITH 1 WORKER
+#=================================================
+
+ynh_script_progression "Running database migrations (1 worker mode)..."
+
+# Start the service with 1 worker for migrations
+ynh_systemctl --service="$app" --action="start"
+
+# Wait for migrations to complete
+# Open WebUI's migrations typically complete within 30 seconds
+# We use a loop to check if the service is responsive
+migration_max_wait=120  # 2 minutes max
+migration_waited=0
+migration_interval=5
+
+while [ $migration_waited -lt $migration_max_wait ]; do
+    # Check if service is running and responsive
+    if curl -s -f -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+        ynh_print_info "Service is responsive, migrations may be complete..."
+        # Give a bit more time for migrations to fully settle
+        sleep 5
+        break
+    fi
+    
+    ynh_print_info "Waiting for migrations... ($migration_waited/$migration_max_wait seconds)"
+    sleep $migration_interval
+    migration_waited=$((migration_waited + migration_interval))
+done
+
+# If service didn't become responsive, continue anyway (it might be a fresh install)
+if [ $migration_waited -ge $migration_max_wait ]; then
+    ynh_print_warn "Migration wait timeout reached, continuing anyway..."
+fi
+
+# Stop the service before pip upgrade
+ynh_systemctl --service="$app" --action="stop"
+
+#=================================================
+# UPGRADE PYTHON PACKAGES
+#=================================================
+
+ynh_script_progression "Upgrading Python packages..."
+
+# Upgrade pip and setuptools first
+"$install_dir/venv/bin/pip" install --upgrade pip wheel setuptools
+
+# Upgrade Open WebUI and all dependencies
+# Using --no-cache-dir to save disk space
+"$install_dir/venv/bin/pip" install --no-cache-dir --upgrade open-webui
+
+#=================================================
+# RE-CONFIGURE .env FILE
+#=================================================
+
+ynh_script_progression "Reconfiguring Open WebUI..."
+
+# Re-generate the .env file from template to pick up any new settings
+ynh_config_add --template=".env.template" --destination="$install_dir/.env"
+
+# Ensure .env has proper permissions
+chmod 600 "$install_dir/.env"
+chown "$app:$app" "$install_dir/.env"
+
+#=================================================
+# CLEANUP MIGRATION OVERRIDE
+#=================================================
+
+ynh_script_progression "Cleaning up migration configuration..."
+
+# Remove the temporary override
+if [ -d "/etc/systemd/system/${app}.service.d" ]; then
+    rm -rf "/etc/systemd/system/${app}.service.d"
+fi
+
+# Reload systemd to restore normal service configuration
+systemctl daemon-reload
+
+#=================================================
+# UPDATE SYSTEM CONFIGURATION
+#=================================================
+
+ynh_script_progression "Updating system configurations..."
+
+# Re-configure systemd service (this restores the normal 4-worker config)
+ynh_config_add_systemd
+
+# Re-configure Nginx reverse proxy
+ynh_config_add_nginx
+
+# Re-add the service to YunoHost's service management
+yunohost service add "$app" \
+    --description="Open WebUI - Self-hosted AI Interface" \
+    --log="/var/log/$app/open-webui.log" \
+    --needs_exposed_ports "$port"
+
+# Re-configure logrotate
+ynh_config_add_logrotate
+
+#=================================================
+# START THE APPLICATION
+#=================================================
+
+ynh_script_progression "Starting Open WebUI with normal configuration (4 workers)..."
+
+# Start the service with normal 4-worker configuration
+ynh_systemctl --service="$app" --action="start"
+
+# Wait for the service to be ready
+sleep 5
+
+# Check if service started successfully
+if ! ynh_systemctl --service="$app" --action="status" >/dev/null 2>&1; then
+    ynh_die "Open WebUI failed to start after upgrade. Check logs at /var/log/$app/open-webui.log"
+fi
+
+# Verify service is responding
+if ! curl -s -f -o /dev/null "http://127.0.0.1:$port/" 2>/dev/null; then
+    ynh_print_warn "Service started but not responding yet. This may take a few more seconds..."
+    sleep 10
+fi
+
+#=================================================
+# END OF SCRIPT
+#=================================================
+
+ynh_script_progression "Upgrade of Open WebUI completed successfully!"
+ynh_print_info "Open WebUI is now accessible at https://${domain}${path_url%/}"
+ynh_print_info "Check logs at: tail -f /var/log/$app/open-webui.log"

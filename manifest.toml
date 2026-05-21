@@ -1,0 +1,83 @@
+#:schema https://raw.githubusercontent.com/YunoHost/apps/main/schemas/manifest.v2.schema.json
+
+packaging_format = 2
+
+id = "open-webui"
+name = "Open WebUI"
+description.en = "Open WebUI is an extensible, self-hosted AI interface featuring OpenAI API support with a ChatGPT-like UI for complete autonomy."
+description.fr = "Open WebUI est une interface IA auto-hébergée et extensible avec support de l'API OpenAI et une interface similaire à ChatGPT pour une autonomie complète."
+version = "0.3.31~ynh1"
+
+maintainers = ["YunoHost"]
+
+[upstream]
+license = "mit"
+website = "https://openwebui.com"
+demo = "https://sentencebook.com"
+admindoc = "https://docs.openwebui.com/"
+userdoc = "https://docs.openwebui.com/"
+code = "https://github.com/open-webui/open-webui"
+
+[integration]
+yunohost = ">= 12.1.17"
+helpers_version = "2.1"
+architectures = "all"
+multi_instance = true
+
+# LDAP integration - users can login using YunoHost credentials
+ldap = "true"
+
+# SSO integration - users are automatically logged in when on YunoHost portal
+sso = "true"
+
+# Estimated disk and RAM requirements
+disk = "2G"
+ram.build = "200M"
+ram.runtime = "1G"
+
+[install]
+    [install.domain]
+    type = "domain"
+    help.en = "Choose a domain for Open WebUI"
+    help.fr = "Choisissez un domaine pour Open WebUI"
+
+    [install.path]
+    type = "path"
+    default = "/webui"
+
+    [install.init_main_permission]
+    type = "group"
+    default = "visitors"
+    help.en = "This app is private by default. Visibly users must be granted access."
+    help.fr = "Cette application est privée par défaut. Les utilisateurs doivent avoir accès explicitement."
+
+    [install.admin]
+    type = "user"
+    help.en = "Choose a YunoHost admin user who will have full access to Open WebUI admin panel"
+    help.fr = "Choisissez un administrateur YunoHost qui aura accès complet au panneau d'administration"
+
+[resources]
+    [resources.system_user]
+    # System user for the app - will be created as $app user
+
+    [resources.install_dir]
+    # Installation directory will be /opt/$app
+    # This will store the venv and app code
+
+    [resources.data_dir]
+    # Data directory for persistent data - /home/yunohost.app/$app
+    # Stores SQLite database, models cache, etc.
+
+    [resources.permissions]
+    main.url = "/"
+
+    [resources.ports]
+    # Random port for the internal application server
+    # Will be used as $port in the app
+
+    [resources.apt]
+    # Python dependencies for Open WebUI
+    packages = "python3-pip, python3-venv, sqlite3"
+
+[permissions]
+# No additional permissions needed - using SSO/LDAP via headers

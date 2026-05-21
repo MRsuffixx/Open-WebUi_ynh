@@ -1,0 +1,93 @@
+#!/bin/bash
+
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+#=================================================
+# LOAD SETTINGS
+#=================================================
+
+app=$YNH_APP_INSTANCE_NAME
+
+# Retrieve settings that may have been set
+domain=$(ynh_app_setting_get --key=domain)
+port=$(ynh_app_setting_get --key=port)
+
+#=================================================
+# REMOVE SYSTEM CONFIGURATION
+#=================================================
+
+ynh_script_progression "Removing system configurations related to $app..."
+
+# Stop the systemd service first
+ynh_script_progression "Stopping Open WebUI service..."
+if ynh_systemctl --service="$app" --action="stop" 2>&1; then
+    ynh_print_info "Service stopped successfully"
+else
+    ynh_print_warn "Service may not have been running"
+fi
+
+# Remove the service from YunoHost's service management
+if ynh_hide_warnings yunohost service status "$app" >/dev/null 2>&1; then
+    ynh_script_progression "Removing service from YunoHost..."
+    yunohost service remove "$app"
+fi
+
+# Remove systemd configuration
+ynh_script_progression "Removing systemd configuration..."
+ynh_config_remove_systemd
+
+# Remove Nginx configuration (reverse proxy)
+ynh_script_progression "Removing Nginx configuration..."
+ynh_config_remove_nginx
+
+# Remove logrotate configuration
+ynh_script_progression "Removing logrotate configuration..."
+ynh_config_remove_logrotate
+
+# Reload services
+ynh_script_progression "Reloading Nginx..."
+ynh_systemctl --service="nginx" --action="reload"
+
+#=================================================
+# REMOVE LOG FILES
+#=================================================
+
+ynh_script_progression "Removing log files..."
+
+# Remove application logs
+if [ -d "/var/log/$app" ]; then
+    ynh_safe_rm "/var/log/$app" 2>/dev/null || true
+fi
+
+#=================================================
+# REMOVE DATA DIRECTORY
+#=================================================
+
+# Note: The data directory (/home/yunohost.app/$app) is automatically
+# removed by YunoHost's resource system AFTER this script runs
+# Only remove it here if --purge flag was used
+
+# This is handled by YunoHost's resources - do NOT manually remove
+# Otherwise data_dir would be removed before backup if user forgets --purge
+
+#=================================================
+# REMOVE INSTALLATION DIRECTORY
+#=================================================
+
+# Note: The install directory (/opt/$app) is automatically
+# removed by YunoHost's resource system AFTER this script runs
+
+# This is handled by YunoHost's resources - do NOT manually remove
+
+#=================================================
+# END OF SCRIPT
+#=================================================
+
+ynh_script_progression "Removal of Open WebUI completed!"
+ynh_print_info "Note: The data directory ($data_dir) was preserved."
+ynh_print_info "To completely remove all data, run: yunohost app remove $app --purge"

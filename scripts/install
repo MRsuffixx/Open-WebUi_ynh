@@ -1,0 +1,148 @@
+#!/bin/bash
+
+#=================================================
+# IMPORT GENERIC HELPERS
+#=================================================
+
+source _common.sh
+source /usr/share/yunohost/helpers
+
+#=================================================
+# MANAGE FAILURE OF THE SCRIPT
+#=================================================
+
+# Exit on error
+ynh_abort_if_errors
+
+#=================================================
+# RETRIEVE ARGUMENTS FROM THE MANIFEST
+#=================================================
+
+# Settings are automatically loaded as bash variables:
+# - $domain
+# - $path
+# - $admin
+# - $install_dir
+# - $port
+# - $data_dir
+
+app=$YNH_APP_INSTANCE_NAME
+
+#=================================================
+# INITIALIZE THE DATA DIRECTORY
+#=================================================
+
+# The data directory will be created by the resources system
+# but we need to ensure proper ownership and permissions
+ynh_script_progression "Setting up data directory..."
+
+# Data directory is automatically provisioned by YunoHost
+# Additional subdirectories for Open WebUI
+mkdir -p "$data_dir/uploads"
+mkdir -p "$data_dir/models"
+
+# Ensure proper ownership - Open WebUI needs write access to data directory
+chown -R "$app:$app" "$data_dir"
+
+#=================================================
+# CREATE VIRTUAL ENVIRONMENT AND INSTALL OPEN WEBUI
+#=================================================
+
+ynh_script_progression "Creating Python virtual environment..."
+
+# Create the venv in the install directory
+# YunoHost resources create install_dir at /opt/$app
+python3 -m venv "$install_dir/venv"
+
+# Upgrade pip to the latest version
+"$install_dir/venv/bin/pip" install --upgrade pip wheel setuptools
+
+# Install Open WebUI with all dependencies
+# Using --no-cache-dir to save disk space
+ynh_script_progression "Installing Open WebUI (this may take a while)..."
+"$install_dir/venv/bin/pip" install --no-cache-dir open-webui
+
+#=================================================
+# CREATE THE .env CONFIGURATION FILE
+#=================================================
+
+ynh_script_progression "Configuring Open WebUI..."
+
+# Generate the .env file from template
+# This will replace __DATA_DIR__, __PORT__, __DOMAIN__ placeholders
+ynh_config_add --template=".env.template" --destination="$install_dir/.env"
+
+# Ensure .env has proper permissions
+chmod 600 "$install_dir/.env"
+chown "$app:$app" "$install_dir/.env"
+
+#=================================================
+# CREATE LOG DIRECTORY
+#=================================================
+
+ynh_script_progression "Creating log directory..."
+
+mkdir -p "/var/log/$app"
+chown -R "$app:$app" "/var/log/$app"
+chmod 755 "/var/log/$app"
+
+#=================================================
+# SETUP SYSTEM CONFIGURATION
+#=================================================
+
+ynh_script_progression "Setting up system configurations..."
+
+# Configure Nginx as reverse proxy (with WebSocket support)
+ynh_config_add_nginx
+
+# Configure systemd service
+ynh_config_add_systemd
+
+# Add the service to YunoHost's service management
+yunohost service add "$app" \
+    --description="Open WebUI - Self-hosted AI Interface" \
+    --log="/var/log/$app/open-webui.log" \
+    --needs_exposed_ports "$port"
+
+# Configure logrotate for application logs
+ynh_config_add_logrotate
+
+#=================================================
+# START THE APPLICATION
+#=================================================
+
+ynh_script_progression "Starting Open WebUI..."
+
+# Start the systemd service
+ynh_systemctl --service="$app" --action="start"
+
+# Wait for the service to be ready
+# Open WebUI may need a few seconds to initialize
+sleep 5
+
+# Check if service started successfully
+if ! ynh_systemctl --service="$app" --action="status" >/dev/null 2>&1; then
+    ynh_die "Open WebUI failed to start. Check logs at /var/log/$app/open-webui.log"
+fi
+
+#=================================================
+# CREATE ADMIN USER
+#=================================================
+
+ynh_script_progression "Setting up admin user..."
+
+# Open WebUI will automatically use the YunoHost admin user
+# via SSO/LDAP headers. The admin user from install.manifest
+# will be granted admin access on first login.
+
+# Store the admin username for reference
+ynh_app_setting_set --key=admin_user --value="$admin"
+
+#=================================================
+# END OF SCRIPT
+#=================================================
+
+ynh_script_progression "Installation of Open WebUI completed successfully!"
+ynh_print_info "Open WebUI is now accessible at https://$domain${path%/}"
+ynh_print_info "Admin user '$admin' will have admin access via SSO/LDAP."
+ynh_print_info "Check logs at: tail -f /var/log/$app/open-webui.log"
